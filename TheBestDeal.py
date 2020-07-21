@@ -7,41 +7,42 @@ import binascii
 import struct
 import math
 import sqlite3
-import API
 from API import Api
 import logging
 
 
+# Veskisfang kauphallarinnar
+DEX = "BH9DpL5P7xe87M6XTVQTk62Tjrv414XAQv"
+
+# Skipunin Smileycoin-cli
+smlycmd = "/home/saeunnelin/smileyCoin/src/smileycoin-cli"
+
+# Sæki klasann Api úr API skjalinu
+api = Api()
+
+# CoinMarketCap skráin hlöðuð inn
+api.readfromfile("verd.json")
+
 # =============================================================================
-# Eftirfarandi gagnarit (e. logger) er skilgreint svo hægt sé að finna þá 
-# staði í forritinu þar sem ekki er sniðugt að taka tilboði og halda utan um
-# kembunina (e. debug) í gagnaritsskrá (e. log file). Sjá línur merktar 
-# logger.debug í föllunum interpretopreturn og acceptoffer. 
+# Eftirfarandi fall segir til um hvort hlutfall af upphæðum tveggja 
+# rafmynta sem verið er að skipta á sé á undirvirði eða yfirvirði 
+# (SMLY/MYNT). Sjá Excel skjal. 
 # =============================================================================
+    
+def profit_loss(abbr, amtcrypto, amtsmly):
+        
+    # Gengi rafmyntanna í dollurum
+    cryptoUSD = float(api.cryptoprice[abbr])
+    SMLYUSD = float(api.cryptoprice["SMLY"])
+    
+    # Heildarverð rafmyntanna í dollurum
+    total_cryptoUSD = amtcrypto*cryptoUSD 
+    total_SMLYUSD = amtsmly*SMLYUSD
+    
+    # Undirvirði eða yfirvirði (SMLY/MYNT)
+    SMLYcryptoPercent = 1-total_SMLYUSD/total_cryptoUSD
 
-# Gagnarit skilgreint
-logger = logging.getLogger(__name__)
-
-# Öll stig frá debug og hærri (info, warning, error og critical) leyfð
-logger.setLevel(logging.DEBUG)
-
-# Streymissýslarinn prentar skilaboðin í stjórnborðsgluggann (e. console window)
-stream_handler = logging.StreamHandler()
-
-# Skráarsýslarinn prentar skilaboðin í eftirfarandi gagnaritsskrá
-file_handler = logging.FileHandler("bestdeal.log")
-
-# Vel hvaða upplýsingar prentast út í gagnaritið
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-stream_handler.setFormatter(formatter)
-file_handler.setFormatter(formatter)
-
-# Bæti að lokum sýslurunum við gagnaritið
-logger.addHandler(stream_handler)
-logger.addHandler(file_handler)
-
-
-
+    return (SMLYcryptoPercent)
 
 
 # =============================================================================
@@ -65,32 +66,11 @@ def mycryptoaddress(abbr):
         mycryptoaddr = "None"
     return (mycryptoaddr)
 
-
-
-
-
-# Veskisfang kauphallarinnar
-DEX = "BH9DpL5P7xe87M6XTVQTk62Tjrv414XAQv"
-
-# Skipunin Smileycoin-cli
-smlycmd = "/home/saeunnelin/smileyCoin/src/smileycoin-cli"
-
-# Sæki klasann Api úr API skjalinu
-api = Api()
-
-# CoinMarketCap skráin hlöðuð inn
-api.readfromfile("verd.json")
-
-
-
-
-
 # =============================================================================
 # Eftirfarandi fall túlkar OP_RETURN færslu sem send er á Kauphöllina. Ef 
 # tilboðfærsla er hagstæð og öll skilyrði eru uppfyllt er samþykktarfærsla 
 # að lokum send á Kauphöllina. 
 # =============================================================================
-
 
 def interpretopreturn(txid):
     sendorreceive = ""
@@ -103,11 +83,13 @@ def interpretopreturn(txid):
     cryptoaddr = ""
     
     # Rawtransaction af færsluauðkenninu (txid)
-    rawtx = subprocess.run([smlycmd, "getrawtransaction", txid], capture_output = True)
+    rawtx = subprocess.run([smlycmd, "getrawtransaction", txid], 
+            capture_output = True)
     rawtxid = rawtx.stdout.decode("utf-8").strip()
     
     # Rawtransaction'ið afkóðað
-    dcrawtx = subprocess.run([smlycmd, "decoderawtransaction", rawtxid], capture_output = True)
+    dcrawtx = subprocess.run([smlycmd, "decoderawtransaction", rawtxid], 
+            capture_output = True)
     dcrawtxid = json.loads(dcrawtx.stdout.decode("utf-8"))
     
     # Veskisfangið sem færslan sendist á
@@ -146,7 +128,8 @@ def interpretopreturn(txid):
                 # Vil aðeins taka tilboðum á ákveðnum bálkakeðjum
                 mycryptoaddr = mycryptoaddress(abbr)
                 if mycryptoaddr == "None":
-                    logger.debug("Skipti við rafmynt sem ég tek ekki við: " + abbr + ". ")
+                    logger.debug("Skipti við rafmynt sem ég tek ekki við: " + 
+                        abbr + ". ")
                     return()
             
             # Satoshi
@@ -160,7 +143,8 @@ def interpretopreturn(txid):
             amtcrypto2 = binascii.unhexlify(amtcrypto1)
             amtSMLY2 = binascii.unhexlify(amtSMLY1)
             
-            # Uppröðun bætanna breytt út little endian og C týpunni breytt út unsigned long long
+            # Uppröðun bætanna breytt út little endian og C týpunni breytt út 
+            # unsigned long long
             amtcrypto3 = struct.unpack('<Q', amtcrypto2)[0]
             amtSMLY3 = struct.unpack('<Q', amtSMLY2)[0]
             
@@ -169,8 +153,7 @@ def interpretopreturn(txid):
             amtSMLY = amtSMLY3*satoshi
             
             # Skoðað hvort skiptin séu undirvirði eða yfirvirði sem hlutf. SMLY/MYNT
-            # (Fall úr API skránni notað. Sjá Excel skjal.)
-            profitloss = api.profit_loss(abbr, amtcrypto, amtSMLY)
+            profitloss = profit_loss(abbr, amtcrypto, amtSMLY)
             
             # Tilboðið er óhagstætt fyrir mig...
                # ef um kauptilboð og yfirvirði SMLY/MYNT er að ræða. 
@@ -188,7 +171,7 @@ def interpretopreturn(txid):
                 logger.debug("Hvorki sölu- né kauptilboð. ")
                 return 
             
-            # Veskisfang sem sá sem gerði tilboðið á á hinni bálkakeðjunni 
+            # Veskisfang þess sem gerði tilboðið á hinni bálkakeðjunni 
             cryptoaddr0 = bytes.fromhex(HEX[42:]).decode("utf-8")
             
             # Sendi samþykktarfærslu
@@ -210,10 +193,6 @@ def interpretopreturn(txid):
             logger.debug("Hvorki tilboðs- né samþykktarfærsla. ")
             return 
     return 
-    
-
-
-
 
 # =============================================================================
 # Eftirfarandi fall býr til OP_RETURN fyrir samþykktarfærslu. 
@@ -235,18 +214,15 @@ def OP_RETURN(abbr, txid):
     
     return(opreturn)
 
-
-
-
 # =============================================================================
 # Eftirfarandi fall sendir samþykktarfærslu á kauphöllina
 # =============================================================================
 
-# Í augnablikinu er ekki hægt að senda samþykktarfærslu á Kauphöllina. Ástæðan 
-# fyrir því er sú að bætafjöldi OP_RETURNs samþykktarfærslunar fer umfram 
-# hámarks bætafjölda OP_RETURNs sem senda má á broskallakeðjunni. 
+# Þegar þetta fall var prufað var ekki hægt að senda samþykktarfærslu á 
+# Kauphöllina vegna þess að bætafjöldi OP_RETURNs samþykktarfærslunar fór 
+# umfram hámarks bætafjölda OP_RETURNs sem senda mátti á broskallakeðjunni. 
 
-# Hér væri einnig sniðugt að skoða hvort það sé næg upphæð í veskinu mínu á 
+# Hér væri sniðugt að skoða hvort það sé næg upphæð í veskinu mínu á 
 # hinni bálkakeðjunni ef ég er að selja MYNT. 
 
 def acceptoffer(amtSMLY, abbr, txid, dcrawtxid):
@@ -316,7 +292,8 @@ def acceptoffer(amtSMLY, abbr, txid, dcrawtxid):
         newhex = sgnrawtxid["hex"]
         
         # Rawtransaction sent
-        #sendrawtx = subprocess.run([smlycmd, "sendrawtransaction", newhex], capture_output = True)
+        #sendrawtx = subprocess.run([smlycmd, "sendrawtransaction", newhex], 
+        #    capture_output = True)
         #print(sendrawtx)
         #sendrawtxid = sendrawtx.stdout.decode("utf-8").strip()
         
@@ -326,15 +303,39 @@ def acceptoffer(amtSMLY, abbr, txid, dcrawtxid):
         return()
     return()
 
+# =============================================================================
+# Eftirfarandi gagnarit (e. logger) er skilgreint svo hægt sé að finna þá 
+# staði í forritinu þar sem ekki er sniðugt að taka tilboði og halda utan um
+# kembunina (e. debug) í gagnaritsskrá (e. log file). 
+# =============================================================================
 
+# Gagnarit skilgreint
+logger = logging.getLogger(__name__)
 
+# Öll stig frá debug og hærri (info, warning, error og critical) leyfð
+logger.setLevel(logging.DEBUG)
 
+# Streymissýslarinn prentar skilaboðin í stjórnborðsgluggann (e. console window)
+stream_handler = logging.StreamHandler()
+
+# Skráarsýslarinn prentar skilaboðin í eftirfarandi gagnaritsskrá
+file_handler = logging.FileHandler("bestdeal.log")
+
+# Vel hvaða upplýsingar prentast út í gagnaritið
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+stream_handler.setFormatter(formatter)
+file_handler.setFormatter(formatter)
+
+# Bæti að lokum sýslurunum við gagnaritið
+logger.addHandler(stream_handler)
+logger.addHandler(file_handler)
 
 # =============================================================================
 # Aðalfallið
 # =============================================================================
 
 def main():
+    # Nokkur prufufærsluauðkenni sem ég bjó til. 
     txid = "bcb22e94a2f9730afe9be57bafd2e0cf0b9f8328a47098b7519486b10c2c2589"
     txid2 = "5dacca17d32c924d7afb7a469681b6136ea5d02db1b6c11bf3137e977769f845"
     txid3 = "eb93db73f3d8ee77eecc3e691474c1e189dbeddc5a117cbebd77a3eaa987a7de"
@@ -345,14 +346,13 @@ def main():
     txid8 = "9987926e9139dfac46bd116caab5b51e507d9ef6b069ef53363b76f306bdef15"
     txid9 = "2882cfa50340561864765a2d4430dc36c4a2272a3eaa8b11c7e7b6768438e59e"
     txid10 = "900e0fca2fe5071fdb9f28b3a614fc5f0213dd4fd255be5eb1b12b2f37829d92"
-    
     txid11 = "e23ccdbada43cbc99b68b98a5aae5d9cd7957ccb44cc1c8873a3d7529d243b86"
     txid12 = "d87d82536c7bb324788c6b048a73883615075631fbe50817fa7fdb7cf559394f"
 
-
-
-    interpretopreturn(txid7)
+    # Fallið interpretopreturn að lokum keyrt á valið færsluauðkenni
+    interpretopreturn(txid12)
     
+    # Hér ætti ég að geta tengst WalletNotify
     #interpretopreturn(sys.argv[1])
 
 
