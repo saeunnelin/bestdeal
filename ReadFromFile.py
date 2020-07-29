@@ -47,7 +47,7 @@ class Api:
                 }
         headers = {
                 'Accepts': 'application/json',
-                'X-CMC_PRO_API_KEY': '49813649-79e6-4416-a97b-1141fb4b205c',
+                'X-CMC_PRO_API_KEY': 'Put your key here!',
                 }
         
         session = Session()
